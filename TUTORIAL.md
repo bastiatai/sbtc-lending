@@ -430,16 +430,16 @@ To integrate with real sBTC tokens, replace placeholder comments with SIP-010 to
 )
 ```
 
-### 2. Using `block-height` in Clarity 3+
+### 2. Using `block-height` in Clarity 4
 
 ❌ **Wrong:**
 ```clarity
-last-update: block-height  ;; Removed in Clarity 3
+last-update: block-height  ;; Removed in Clarity 3, not available in Clarity 4
 ```
 
 ✅ **Correct:**
 ```clarity
-last-update: stacks-block-height  ;; Use in Clarity 3+
+last-update: stacks-block-height  ;; Use in Clarity 4
 ```
 
 ### 3. Integer Division Precision Loss
