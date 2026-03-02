@@ -171,6 +171,9 @@
       (repay-amount (if (<= amount (get amount position))
                       amount
                       (get amount position)))
+      (new-debt (- (get amount position) repay-amount))
+      (collateral-to-return (/ (* (get collateral position) repay-amount) (get amount position)))
+      (remaining-collateral (- (get collateral position) collateral-to-return))
     )
     (asserts! (> amount u0) err-invalid-amount)
 
@@ -192,12 +195,7 @@
         (ok true)
       )
       ;; Partial repayment - reduce debt proportionally
-      (let
-        (
-          (new-debt (- (get amount position) repay-amount))
-          (collateral-to-return (/ (* (get collateral position) repay-amount) (get amount position)))
-          (remaining-collateral (- (get collateral position) collateral-to-return))
-        )
+      (begin
         ;; Transfer proportional collateral back to user
         ;; In production, replace with actual sBTC SIP-010 transfer
         ;; (try! (as-contract (contract-call? .sbtc-token transfer collateral-to-return tx-sender sender none)))
@@ -221,32 +219,26 @@
     (
       (position (unwrap! (get-borrow borrower) err-position-not-found))
       (health-factor (calculate-health-factor borrower))
+      (debt (get amount position))
+      (collateral (get collateral position))
+      (penalty-amount (/ (* collateral liquidation-penalty) u100))
+      (liquidator-reward penalty-amount)
+      (remaining-collateral (- collateral penalty-amount))
     )
     (asserts! (< health-factor liquidation-ratio) err-position-healthy)
 
-    ;; Calculate liquidation amounts
-    (let
-      (
-        (debt (get amount position))
-        (collateral (get collateral position))
-        (penalty-amount (/ (* collateral liquidation-penalty) u100))
-        (liquidator-reward penalty-amount)
-        (remaining-collateral (- collateral penalty-amount))
-      )
+    ;; Liquidator must repay the debt
+    ;; In production, replace with actual sBTC SIP-010 transfer
+    ;; (try! (contract-call? .sbtc-token transfer debt tx-sender (as-contract tx-sender) none))
 
-      ;; Liquidator must repay the debt
-      ;; In production, replace with actual sBTC SIP-010 transfer
-      ;; (try! (contract-call? .sbtc-token transfer debt tx-sender (as-contract tx-sender) none))
+    ;; Transfer collateral to liquidator (with penalty bonus)
+    ;; In production, replace with actual sBTC SIP-010 transfer
+    ;; (try! (as-contract (contract-call? .sbtc-token transfer collateral tx-sender sender none)))
 
-      ;; Transfer collateral to liquidator (with penalty bonus)
-      ;; In production, replace with actual sBTC SIP-010 transfer
-      ;; (try! (as-contract (contract-call? .sbtc-token transfer collateral tx-sender sender none)))
+    ;; Remove position
+    (map-delete borrows borrower)
+    (var-set total-borrowed (- (var-get total-borrowed) debt))
 
-      ;; Remove position
-      (map-delete borrows borrower)
-      (var-set total-borrowed (- (var-get total-borrowed) debt))
-
-      (ok true)
-    )
+    (ok true)
   )
 )

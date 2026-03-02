@@ -406,7 +406,32 @@ To integrate with real sBTC tokens, replace placeholder comments with SIP-010 to
 
 ## Common Pitfalls and Solutions
 
-### 1. Not Accumulating Debt
+### 1. Nested Let Statements
+
+❌ **Wrong:**
+```clarity
+(let ((position (get-position user)))
+  ;; ... do something ...
+  (let ((debt (get-debt position)))  ;; Nested let!
+    ;; ... more work ...
+  )
+)
+```
+
+✅ **Correct:**
+```clarity
+(let
+  (
+    (position (get-position user))
+    (debt (get-debt position))  ;; Can reference earlier variables
+  )
+  ;; ... all work here ...
+)
+```
+
+**Why:** Clarity evaluates let bindings sequentially, so later variables can reference earlier ones. Avoid nesting - use a single let with all variables.
+
+### 2. Not Accumulating Debt
 
 ❌ **Wrong:**
 ```clarity
@@ -430,7 +455,7 @@ To integrate with real sBTC tokens, replace placeholder comments with SIP-010 to
 )
 ```
 
-### 2. Using `block-height` in Clarity 4
+### 3. Using `block-height` in Clarity 4
 
 ❌ **Wrong:**
 ```clarity
@@ -442,7 +467,7 @@ last-update: block-height  ;; Removed in Clarity 3, not available in Clarity 4
 last-update: stacks-block-height  ;; Use in Clarity 4
 ```
 
-### 3. Integer Division Precision Loss
+### 4. Integer Division Precision Loss
 
 When calculating proportional returns, always multiply before dividing:
 
