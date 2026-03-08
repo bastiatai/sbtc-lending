@@ -3,6 +3,7 @@
 
 ;; Constants
 (define-constant contract-owner tx-sender)
+(define-constant contract-principal (as-contract tx-sender))
 (define-constant sbtc-token 'SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token)
 (define-constant err-owner-only (err u100))
 (define-constant err-insufficient-balance (err u101))
@@ -31,11 +32,6 @@
     collateral: uint,
     last-update: uint
   }
-)
-
-;; Private helper functions
-(define-private (get-contract-principal)
-  (as-contract? () tx-sender)
 )
 
 ;; Read-only functions
@@ -83,7 +79,6 @@
   (let
     (
       (current-supply (get-supply tx-sender))
-      (contract-principal (unwrap! (get-contract-principal) (err u999)))
     )
     (asserts! (> amount u0) err-invalid-amount)
 
@@ -116,10 +111,9 @@
     ;; Update total supplied
     (var-set total-supplied (- (var-get total-supplied) amount))
 
-    ;; Transfer sBTC from contract to user (requires as-contract? with allowances)
-    (unwrap! (as-contract? ((with-ft 'SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token "sbtc-token" amount))
-               (unwrap! (contract-call? 'SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token transfer amount tx-sender recipient none) (err u998)))
-             (err u999))
+    ;; Transfer sBTC from contract to user
+    (try! (as-contract (contract-call? 'SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token
+      transfer amount tx-sender recipient none)))
 
     (ok true)
   )
@@ -131,7 +125,6 @@
     (
       (max-borrow (calculate-max-borrow collateral-amount))
       (existing-position (get-borrow tx-sender))
-      (contract-principal (unwrap! (get-contract-principal) (err u999)))
       (recipient tx-sender)
     )
     (asserts! (> collateral-amount u0) err-invalid-amount)
@@ -164,10 +157,9 @@
       )
     )
 
-    ;; Transfer borrowed sBTC from contract to user (requires as-contract? with allowances)
-    (unwrap! (as-contract? ((with-ft 'SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token "sbtc-token" borrow-amount))
-               (unwrap! (contract-call? 'SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token transfer borrow-amount tx-sender recipient none) (err u998)))
-             (err u999))
+    ;; Transfer borrowed sBTC from contract to user
+    (try! (as-contract (contract-call? 'SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token
+      transfer borrow-amount tx-sender recipient none)))
 
     (ok true)
   )
@@ -184,7 +176,6 @@
       (new-debt (- (get amount position) repay-amount))
       (collateral-to-return (/ (* (get collateral position) repay-amount) (get amount position)))
       (remaining-collateral (- (get collateral position) collateral-to-return))
-      (contract-principal (unwrap! (get-contract-principal) (err u999)))
       (recipient tx-sender)
     )
     (asserts! (> amount u0) err-invalid-amount)
@@ -197,9 +188,8 @@
       ;; Full repayment - return all collateral
       (begin
         ;; Transfer collateral back to user
-        (unwrap! (as-contract? ((with-ft 'SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token "sbtc-token" (get collateral position)))
-                   (unwrap! (contract-call? 'SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token transfer (get collateral position) tx-sender recipient none) (err u998)))
-                 (err u999))
+        (try! (as-contract (contract-call? 'SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token
+          transfer (get collateral position) tx-sender recipient none)))
 
         ;; Remove position
         (map-delete borrows tx-sender)
@@ -209,9 +199,8 @@
       ;; Partial repayment - reduce debt proportionally
       (begin
         ;; Transfer proportional collateral back to user
-        (unwrap! (as-contract? ((with-ft 'SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token "sbtc-token" collateral-to-return))
-                   (unwrap! (contract-call? 'SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token transfer collateral-to-return tx-sender recipient none) (err u998)))
-                 (err u999))
+        (try! (as-contract (contract-call? 'SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token
+          transfer collateral-to-return tx-sender recipient none)))
 
         ;; Update position
         (map-set borrows tx-sender {
@@ -237,7 +226,6 @@
       (penalty-amount (/ (* collateral liquidation-penalty) u100))
       (liquidator-reward penalty-amount)
       (remaining-collateral (- collateral penalty-amount))
-      (contract-principal (unwrap! (get-contract-principal) (err u999)))
       (recipient tx-sender)
     )
     (asserts! (< health-factor liquidation-ratio) err-position-healthy)
@@ -245,10 +233,13 @@
     ;; Liquidator must repay the debt
     (try! (contract-call? 'SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token transfer debt tx-sender contract-principal none))
 
-    ;; Transfer collateral to liquidator (with penalty bonus)
-    (unwrap! (as-contract? ((with-ft 'SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token "sbtc-token" collateral))
-               (unwrap! (contract-call? 'SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token transfer collateral tx-sender recipient none) (err u998)))
-             (err u999))
+    ;; Transfer liquidator reward (10% penalty bonus) to liquidator
+    (try! (as-contract (contract-call? 'SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token
+      transfer liquidator-reward tx-sender recipient none)))
+
+    ;; Return remaining collateral to borrower
+    (try! (as-contract (contract-call? 'SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token
+      transfer remaining-collateral tx-sender borrower none)))
 
     ;; Remove position
     (map-delete borrows borrower)
